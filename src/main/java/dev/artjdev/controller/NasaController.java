@@ -2,36 +2,45 @@ package dev.artjdev.controller;
 
 import dev.artjdev.model.Params;
 import dev.artjdev.model.Post;
-import dev.artjdev.proxies.NasaProxy;
+import dev.artjdev.proxies.NasaMediaProxy;
+import dev.artjdev.proxies.NasaPostProxy;
+import feign.Response;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.multipart.MultipartFile;
 
-@RestController
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Map;
+
+@Controller
 public class NasaController {
     @Value("${key.value}")
     private String apiKey;
-//    @Value("${media.service.url}")
-//    private String mediaUrl;
-    private final RestTemplate rest;
-    private final NasaProxy nasaProxy;
+    @Value("${media.service.url}")
+    private String mediaUrl;
+    private final String contentType = "Content-Type";
+    private final NasaPostProxy nasaPostProxy;
+    private final NasaMediaProxy nasaMediaProxy;
 
-    public NasaController(RestTemplate rest, NasaProxy nasaProxy) {
-        this.rest = rest;
-        this.nasaProxy = nasaProxy;
+    public NasaController(NasaPostProxy nasaProxy, NasaMediaProxy nasaMediaProxy) {
+        this.nasaPostProxy = nasaProxy;
+        this.nasaMediaProxy = nasaMediaProxy;
     }
 
-    @GetMapping("/nasa")
-    public ResponseEntity<MultipartFile> getContent() {
+    @GetMapping(value = "/nasa")
+    public ResponseEntity<byte[]> getContent() throws IOException {
         Params params = new Params(apiKey);
-        Post post = nasaProxy.getPost(params);
+        Post post = nasaPostProxy.getPost(params);
         String uri = post.getUrl();
-        //        String mediaPath = url.substring(mediaUrl.length());
-//        MultipartFile file = nasaProxy.getMedia(mediaPath);
-
-        return rest.getForEntity(uri, MultipartFile.class);
+        String mediaPath = uri.substring(mediaUrl.length());
+        Response response = nasaMediaProxy.getMedia(mediaPath);
+        Map<String, Collection<String>> headers = response.headers();
+        String type = headers.get(contentType).toString().substring(1, headers.get(contentType).toString().length() - 1);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(type))
+                .contentLength(response.body().length())
+                .body(response.body().asInputStream().readAllBytes());
     }
 }
